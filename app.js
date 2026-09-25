@@ -22,7 +22,7 @@ function bindCards(){app.querySelectorAll('[data-open]').forEach(b=>b.onclick=()
 function renderTesterUi(message=''){
  const button=document.querySelector('#tester-access'),status=document.querySelector('#tester-status');
  document.body.classList.toggle('tester-gated',!testerSession);
- if(button)button.textContent='Tester sign out';
+ if(button)button.textContent=testerSession?'Tester sign out':'Tester sign in';
  if(status)status.textContent=message|| (testerSession?'Approved tester access':'');
 }
 function renderWelcome(message=''){
@@ -41,10 +41,19 @@ function renderWelcome(message=''){
 function bindTop(){
  document.querySelector('#reference-desk').onclick=referenceDeskV4;
  document.querySelector('.brand').onclick=e=>{e.preventDefault();query='';tray='';category='';family='';specialty='';testerSession?instrumentHome():renderWelcome();};
- document.querySelector('#tester-access').onclick=async()=>{
-  if(testerSession){
-   try{await (await getPlaygroundApi()).signOut();}
-   catch(error){renderTesterUi('Tester sign-out is temporarily unavailable.');}
+ const button=document.querySelector('#tester-access');
+ button.onclick=async()=>{
+  if(!testerSession){renderWelcome();return;}
+  button.disabled=true;
+  try{
+   await (await getPlaygroundApi()).signOut();
+   testerSession=null;
+   renderTesterUi();
+   renderWelcome();
+  }
+  catch(error){
+   button.disabled=false;
+   renderTesterUi('Tester sign-out is temporarily unavailable.');
   }
  };
  renderTesterUi();

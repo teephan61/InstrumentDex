@@ -25,6 +25,12 @@ test('tester sign-in authenticates before checking tester authorization',()=>{
  assert.doesNotMatch(appSource,/InstrumentDex (tester|draft) diagnostic|console\.info\(/);
 });
 
+test('successful sign-out clears local state and renders the welcome board immediately',()=>{
+ assert.match(appSource,/await \(await getPlaygroundApi\(\)\)\.signOut\(\);\s*testerSession=null;\s*renderTesterUi\(\);\s*renderWelcome\(\);/);
+ assert.match(appSource,/catch\(error\)\{\s*button\.disabled=false;\s*renderTesterUi\('Tester sign-out is temporarily unavailable\.'\);/);
+ assert.match(appSource,/if\(event==='SIGNED_OUT'\|\|!session\)\{testerSession=null;renderTesterUi\(\);renderWelcome\(\);\}/);
+});
+
 test('tester-facing entry text avoids internal playground terminology',()=>{
  assert.match(appSource,/Sign in below to access the InstrumentDex demo environment\./);
  assert.doesNotMatch(appSource,/enter the shared InstrumentDex playground/);
