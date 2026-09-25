@@ -1,5 +1,28 @@
 export const facility={id:'harbour',name:'Harbour Demo Hospital'};
 
+export const instrumentFamilies=Object.freeze([
+ 'Forceps / Hemostats',
+ 'Scissors',
+ 'Needle Holders',
+ 'Retractors',
+ 'Suction / Cannulas',
+ 'Bone / Orthopedic Instruments',
+ 'Dental / Oral Surgery',
+ 'Laparoscopic',
+ 'Endoscopic / Specialty Devices',
+ 'Tissue / Grasping Forceps'
+]);
+const familySynonyms=new Map([
+ ['laparoscopic instruments','Laparoscopic'],
+ ['laparoscopic instrument','Laparoscopic'],
+ ['laparoscopy','Laparoscopic']
+]);
+const normalizeFamilyKey=value=>String(value||'').trim().toLowerCase().replace(/\s+/g,' ');
+export function normalizeInstrumentFamily(value){
+ const key=normalizeFamilyKey(value);
+ return instrumentFamilies.find(family=>normalizeFamilyKey(family)===key)||familySynonyms.get(key)||null;
+}
+
 // Identity, facility context, and source-grounded knowledge are intentionally separate.
 // A concept can have candidate products; only a trusted identifier confirms one.
 export const products=[
@@ -47,7 +70,7 @@ export const instrumentSpecialties=[];
 const linkSpecialties=(conceptId,...specialtyIds)=>specialtyIds.forEach(specialtyTermId=>{
  if(!instrumentSpecialties.some(link=>link.instrument_concept_id===conceptId&&link.specialty_term_id===specialtyTermId))instrumentSpecialties.push({instrument_concept_id:conceptId,specialty_term_id:specialtyTermId});
 });
-const setFamily=(id,family,...specialties)=>{const item=instruments.find(x=>x.id===id);if(item){item.family=family;linkSpecialties(id,...specialties);}};
+const setFamily=(id,family,...specialties)=>{const item=instruments.find(x=>x.id===id);if(item){item.family=normalizeInstrumentFamily(family)||family;linkSpecialties(id,...specialties);}};
 
 setFamily('mayo','Scissors','general-surgery','gynecology');
 setFamily('metz','Scissors','general-surgery','gynecology');
@@ -63,7 +86,8 @@ setFamily('camera-head','Endoscopic / Specialty Devices','endoscopy','laparoscop
 
 const seedConcepts=(family,kind,specialties,entries)=>entries.forEach(([id,name,cue])=>{
  if(instruments.some(item=>item.id===id))return;
- instruments.push({id,name,category:family,family,features:[cue],kind,warning:'Concept recognition supports comparison only. Confirm the exact manufacturer product before relying on product-specific processing guidance.'});
+ const normalizedFamily=normalizeInstrumentFamily(family)||family;
+ instruments.push({id,name,category:normalizedFamily,family:normalizedFamily,features:[cue],kind,warning:'Concept recognition supports comparison only. Confirm the exact manufacturer product before relying on product-specific processing guidance.'});
  linkSpecialties(id,...specialties);
 });
 
@@ -91,7 +115,7 @@ seedConcepts('Bone / Orthopedic Instruments','forceps',['orthopedics'],[
 seedConcepts('Dental / Oral Surgery','forceps',['dental-oral'],[
  ['molt-9','No. 9 Molt Periosteal Elevator','Double-ended elevator with a broad rounded periosteal tip'],['seldin-23','No. 23 Seldin Periosteal Retractor','Broad curved blade for reflecting oral soft tissue'],['lucas-curette','Lucas Surgical Curette','Small spoon-shaped curette with an angled shank'],['cryer-left','Cryer Elevator Left','Triangular left-oriented elevator tip for root elevation'],['cryer-right','Cryer Elevator Right','Triangular right-oriented elevator tip for root elevation'],['seldin-straight','Seldin Straight Elevator','Straight wedge-shaped elevator blade'],['miller-colburn','Miller-Colburn Bone File','Double-ended bone file with cross-cut surfaces'],['heidbrink','Heidbrink Root Tip Pick','Fine hooked tip for engaging root fragments'],['friedman-rongeur','Friedman Rongeur','Small cup-shaped rongeur for alveolar bone']
 ]);
-seedConcepts('Laparoscopic Instruments','scope',['laparoscopic'],[
+seedConcepts('Laparoscopic','scope',['laparoscopic'],[
  ['lap-atraumatic-grasper','Laparoscopic Atraumatic Grasper','Long insulated shaft with broad atraumatic jaws'],['maryland-dissector','Maryland Dissector','Curved fine laparoscopic jaws on an insulated shaft'],['lap-scissors','Laparoscopic Scissors','Long insulated shaft with short articulating scissor blades'],['lap-needle-holder','Laparoscopic Needle Holder','Long shaft with serrated needle-holding jaws'],['lap-babcock','Laparoscopic Babcock Grasper','Fenestrated atraumatic jaws on a laparoscopic shaft'],['lap-bowel-grasper','Laparoscopic Bowel Grasper','Long shaft with broad atraumatic bowel-grasping jaws'],['trocar-cannula','Trocar / Cannula','Port sleeve with a valve housing for laparoscopic access'],['lap-retractor','Laparoscopic Retractor','Long shaft with a fan or paddle-style retraction tip'],['monopolar-hook','Monopolar Hook Electrode','Insulated shaft ending in a small curved hook electrode']
 ]);
 // Distinct common variants are kept as separate concepts only where the form is
@@ -286,11 +310,13 @@ export function knowledgeState(item,resolution){
 export function search(query='',tray='',category='',family='',specialty=''){
  const normalize=value=>String(value||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
  const q=normalize(query);
+ const selectedFamily=family?normalizeInstrumentFamily(family):null;
+ if(family&&!selectedFamily)return [];
  return instruments.flatMap(item=>{
   const profile=getProfile(item), itemProducts=getProducts(item), itemVariants=getVariants(item),itemSpecialties=getSpecialties(item);
   if(tray&&!profile.trays.some(t=>t.name===tray))return [];
   if(category&&item.category!==category)return [];
-  if(family&&item.family!==family)return [];
+  if(selectedFamily&&normalizeInstrumentFamily(item.family||item.category)!==selectedFamily)return [];
   if(specialty&&!itemSpecialties.some(term=>term.id===specialty))return [];
   const fields=[['Matched common name',item.name],['Matched instrument family',item.family],['Matched specialty',itemSpecialties.map(term=>term.name).join(' ')],['Matched local name',profile.preferredName],['Matched local alias',profile.aliases.join(' ')],['Matched catalog number',itemProducts.map(p=>p.catalog).join(' ')],['Matched variant catalog number',itemVariants.map(v=>v.catalog).join(' ')],['Matched manufacturer',itemProducts.map(p=>p.manufacturer).join(' ')],['Matched model',itemProducts.map(p=>p.model).join(' ')],['Feature match',item.features.join(' ')],['Tray-context match',profile.trays.map(t=>t.name).join(' ')]];
   const reasons=fields.filter(([,value])=>q&&normalize(value).includes(q)).map(([reason])=>reason);
@@ -298,6 +324,8 @@ export function search(query='',tray='',category='',family='',specialty=''){
   return [{...item,reasons:tray?[`Found in ${tray}`,...reasons]:reasons.length?reasons:['Browse instrument reference']}];
  });
 }
+// Keep family-card counts and family browsing on the same normalized collection.
+export const getInstrumentsForFamily=family=>search('','','',family,'');
 export function addLocalReference({name,preferredName,aliases='',tray,quantity,note,category='Local reference',distinguishingFeatures='',manufacturer='',catalog='',reuse='',variant='',whereFound='',sourceLink='',ifuRevision='',sourceLocator='',sourceNote='',reviewStatus='Draft',...processingDraft}){
  const id=`local-${Date.now().toString(36)}`;
  const features=distinguishingFeatures.split('\n').map(feature=>feature.trim()).filter(Boolean);
@@ -305,6 +333,36 @@ export function addLocalReference({name,preferredName,aliases='',tray,quantity,n
  instruments.unshift(item);
  facilityProfiles[id]={preferredName:preferredName||name,aliases:aliases.split(',').map(x=>x.trim()).filter(Boolean),trays:tray?[{name:tray,quantity:quantity||'not recorded'}]:[],note:[whereFound,note].filter(Boolean).join(' · ')||'Local MDR note pending review.'};
  instrumentDrafts[id]={manufacturer,catalog,reuse,variant,sourceLink,ifuRevision,sourceLocator,sourceNote,reviewStatus,processingDraft};
+ return item;
+}
+const normalizedText=value=>String(value||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+export function findLikelyConceptMatches({name='',aliases=[]}={}){
+ const names=[name,...(Array.isArray(aliases)?aliases:String(aliases).split(','))].map(normalizedText).filter(Boolean);
+ if(!names.length)return [];
+ return instruments.filter(item=>{
+  const profile=getProfile(item);
+  const candidates=[item.name,profile.preferredName,...profile.aliases].map(normalizedText).filter(Boolean);
+  return names.some(value=>candidates.some(candidate=>candidate===value||candidate.includes(value)||value.includes(candidate)));
+ });
+}
+// Shared playground drafts hydrate into the same in-memory read model as seeded
+// concepts. Their draft/source state remains separate from product and V4 knowledge.
+export function upsertSharedDraft(record){
+ const id=`shared-${record.id}`;
+ const normalizedFamily=normalizeInstrumentFamily(record.family);
+ const aliases=Array.isArray(record.aliases)?record.aliases:[];
+ const cue=record.recognition_cue||'Recognition cue pending review';
+ const features=[cue,...(record.distinguishing_features||[])].filter((value,index,all)=>value&&all.indexOf(value)===index);
+ const item={id,name:record.common_name,category:normalizedFamily||record.family||'Local reference',family:normalizedFamily||record.family||'Local reference',features,kind:'forceps',confusableNames:record.confusables||[],warning:'Shared tester draft. Exact manufacturer product and applicable processing guidance are not confirmed.'};
+ const existing=instruments.findIndex(candidate=>candidate.id===id);
+ if(existing>=0)instruments.splice(existing,1,item);else instruments.unshift(item);
+ const specialtyIds=(record.specialty_ids||[]).filter(specialtyId=>specialtyTerms.some(term=>term.id===specialtyId));
+ for(let index=instrumentSpecialties.length-1;index>=0;index--)if(instrumentSpecialties[index].instrument_concept_id===id)instrumentSpecialties.splice(index,1);
+ linkSpecialties(id,...specialtyIds);
+ const context=record.facility_context||{};
+ facilityProfiles[id]={preferredName:context.local_name||record.common_name,aliases,trays:(context.trays||[]).map(tray=>({name:tray.name,quantity:tray.quantity||'not recorded'})),note:context.note||'Shared tester draft — facility context pending review.'};
+ const product=record.product_candidate||{};
+ instrumentDrafts[id]={manufacturer:product.manufacturer||'',catalog:product.catalog||'',reuse:product.reuse||'',variant:product.variant||'',reviewStatus:'Draft',sourceGroundingState:'not_source_grounded',isShared:true,submittedBy:record.submitted_by||'',processingDraft:record.processing_draft||{},sourceNote:record.source_note||''};
  return item;
 }
 export const getInstrumentDraft=item=>instrumentDrafts[item.id];

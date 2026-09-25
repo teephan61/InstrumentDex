@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {instruments,facilityProfiles,knowledgeRepresentations,search,resolveIdentity,knowledgeState,getApplicableRepresentation,getSource,getProducts,getVariants,addLocalReference,getInstrumentDraft,getSpecialties,specialtyTerms,instrumentSpecialties} from './domain.js';
+import {instruments,facilityProfiles,knowledgeRepresentations,search,resolveIdentity,knowledgeState,getApplicableRepresentation,getSource,getProfile,getProducts,getVariants,addLocalReference,getInstrumentDraft,getSpecialties,specialtyTerms,instrumentSpecialties,findLikelyConceptMatches,upsertSharedDraft,normalizeInstrumentFamily,instrumentFamilies,getInstrumentsForFamily} from './domain.js';
 const mayo=instruments.find(i=>i.id==='mayo'),mask=instruments.find(i=>i.id==='mask'),scope=instruments.find(i=>i.id==='scope');
+
+test('built-in seed concepts use canonical instrument-family values',()=>{
+ const builtInConcepts=instruments.filter(item=>!String(item.id).startsWith('shared-'));
+ assert.equal(builtInConcepts.some(item=>item.family==='Laparoscopic Instruments'||item.category==='Laparoscopic Instruments'),false);
+ assert.equal(builtInConcepts.filter(item=>item.family==='Laparoscopic').length,9);
+});
 
 test('search supports common names, aliases, identifiers, features, manufacturers and tray context',()=>{
  for(const [q,id] of [['Big Pean','pean'],['heavy Mayo','mayo'],['EX-M170','mayo'],['Example Surgical','mayo'],['Mayo curved','mayo'],['fenestrated','babcock'],['Tonsil Set','suction-single']])assert.ok(search(q).some(i=>i.id===id));
@@ -19,6 +25,21 @@ test('specialty is a many-to-many clinical context distinct from family and tray
  assert.ok(search('','','','','ent').some(item=>item.id==='suction-reusable'));
  assert.equal(specialtyTerms.length,8);
  assert.ok(instrumentSpecialties.some(link=>link.instrument_concept_id==='pean'&&link.specialty_term_id==='general-surgery'));
+});
+test('browse filtering supports specialty, tray, visible combinations, and independent clearing',()=>{
+ const orthopedics=search('','','','','orthopedics');
+ const orthopedicSet=search('','Orthopedic Set');
+ const orthopedicSetForOrthopedics=search('','Orthopedic Set','','','orthopedics');
+ assert.ok(orthopedics.length>0);
+ assert.ok(orthopedics.every(item=>getSpecialties(item).some(term=>term.id==='orthopedics')));
+ assert.ok(orthopedicSet.length>0);
+ assert.ok(orthopedicSet.every(item=>getProfile(item).trays.some(tray=>tray.name==='Orthopedic Set')));
+ assert.deepEqual(orthopedicSetForOrthopedics.map(item=>item.id),orthopedicSet.map(item=>item.id));
+ // Clearing one control leaves the other visible filter in effect.
+ assert.deepEqual(search('','Orthopedic Set','','','').map(item=>item.id),orthopedicSet.map(item=>item.id));
+ assert.deepEqual(search('','','','','orthopedics').map(item=>item.id),orthopedics.map(item=>item.id));
+ assert.notDeepEqual(search('','','','','ent').map(item=>item.id),orthopedics.map(item=>item.id));
+ assert.notDeepEqual(search('','Tonsil Set').map(item=>item.id),orthopedicSet.map(item=>item.id));
 });
 test('realistic concept seeds expose recognition, aliases, specialty, and tray context without fabricated products',()=>{
  const required=['halsted-mosquito','kelly','crile','pean','kocher','mixter','schnidt','allis','babcock','adson-brown','mayo','mayo-straight','mayo-hegar','weitlaner','gelpi','yankauer','poole','frazier','luer-rongeur','kerrison-rongeur','molt-9','cryer-left','lap-atraumatic-grasper','maryland-dissector','monopolar-hook'];
@@ -92,4 +113,33 @@ test('instrument drafts retain MDR intake details without product-specific knowl
  assert.deepEqual(created.features,['Fine serrations','Long shank']);
  assert.equal(getInstrumentDraft(created).catalog,'DI-42');
  assert.equal(getProducts(created).length,0);
+});
+test('shared tester drafts hydrate as searchable draft concepts without confirming products or processing',()=>{
+ const record={id:'00000000-0000-4000-8000-000000000001',common_name:'Demo shared retractor',family:'Retractors',aliases:['tester retractor'],recognition_cue:'Wide blunt rake',distinguishing_features:['Wide blunt rake','Short handle'],confusables:['Similar rake retractor'],specialty_ids:['general-surgery','orthopedics'],facility_context:{local_name:'Shared rake',note:'Tester context',trays:[{name:'Tester Set',quantity:'1'}]},product_candidate:{manufacturer:'Unknown maker',catalog:'?',variant:'wide',reuse:'Reusable',identity_state:'unresolved'},processing_draft:{manualCleaning:'Required'},source_note:'Source link: demo\nNote: tester intake note',submitted_by:'tester@example.com'};
+ const created=upsertSharedDraft(record);
+ assert.ok(search('tester retractor').some(item=>item.id===created.id));
+ assert.ok(search('','','','Retractors').some(item=>item.id===created.id));
+ assert.ok(search('','','','','orthopedics').some(item=>item.id===created.id));
+ assert.ok(search('','Tester Set').some(item=>item.id===created.id));
+ assert.equal(getInstrumentDraft(created).sourceGroundingState,'not_source_grounded');
+ assert.equal(getInstrumentDraft(created).sourceNote,record.source_note);
+ assert.equal(getInstrumentDraft(created).variant,'wide');
+ assert.equal(knowledgeState(created,resolveIdentity(created)),'identity_insufficient');
+ assert.ok(findLikelyConceptMatches({name:'Demo shared retractor'}).some(item=>item.id===created.id));
+ assert.equal(findLikelyConceptMatches({name:'an entirely new name'}).length,0);
+ assert.equal(upsertSharedDraft(record).id,created.id);
+});
+
+test('legacy laparoscopic family labels normalize to one canonical browse family',()=>{
+ assert.equal(normalizeInstrumentFamily('Laparoscopic'),'Laparoscopic');
+ assert.equal(normalizeInstrumentFamily('Laparoscopic Instruments'),'Laparoscopic');
+ const hydrated=upsertSharedDraft({id:'00000000-0000-4000-8000-000000000002',common_name:'Legacy laparoscopic draft',family:'Laparoscopic Instruments',aliases:[],recognition_cue:'Long insulated shaft',distinguishing_features:[],confusables:[],specialty_ids:['laparoscopic'],facility_context:{trays:[]},product_candidate:{},processing_draft:{}});
+ assert.equal(hydrated.family,'Laparoscopic');
+ assert.deepEqual([...new Set(instruments.map(item=>item.family).filter(family=>String(family||'').startsWith('Laparoscopic')))],['Laparoscopic']);
+ assert.deepEqual(instrumentFamilies.filter(family=>family==='Laparoscopic'),['Laparoscopic']);
+ const canonicalResults=getInstrumentsForFamily('Laparoscopic');
+ const legacyResults=getInstrumentsForFamily('Laparoscopic Instruments');
+ assert.deepEqual(legacyResults.map(item=>item.id),canonicalResults.map(item=>item.id));
+ assert.equal(canonicalResults.length,search('','','','Laparoscopic').length);
+ assert.ok(canonicalResults.some(item=>item.id===hydrated.id));
 });
