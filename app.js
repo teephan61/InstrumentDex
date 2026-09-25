@@ -94,7 +94,7 @@ async function activateTesterSession(session){
   renderWelcome(isTesterAuthorizationError(error)?'Tester access is not enabled for this account.':'Tester sign-in temporarily unavailable.');
   return false;
  }
- try{hydrateSharedDrafts(records);renderTesterUi();instrumentHome();return true;}
+ try{hydrateSharedDrafts(records);renderTesterUi();instrumentHome();window.scrollTo(0,0);return true;}
  catch(error){
   testerSession=null;renderTesterUi();renderWelcome('Tester sign-in temporarily unavailable.');
   return false;

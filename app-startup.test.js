@@ -20,6 +20,7 @@ test('tester sign-in authenticates before checking tester authorization',()=>{
  assert.match(playgroundSource,/callback\(event,session\)/);
  assert.match(appSource,/session=await \(await getPlaygroundApi\(\)\)\.signInTester/);
  assert.match(appSource,/await activateTesterSession\(session\);/);
+ assert.match(appSource,/hydrateSharedDrafts\(records\);renderTesterUi\(\);instrumentHome\(\);window\.scrollTo\(0,0\);return true;/);
  assert.match(appSource,/function isTesterAuthorizationError\(error\)\{return error\?\.code==='42501'\|\|error\?\.status===403;\}/);
  assert.match(appSource,/isTesterAuthorizationError\(error\)\?'Tester access is not enabled for this account\.'\s*:\s*'Tester sign-in temporarily unavailable\.'/);
  assert.doesNotMatch(appSource,/InstrumentDex (tester|draft) diagnostic|console\.info\(/);
