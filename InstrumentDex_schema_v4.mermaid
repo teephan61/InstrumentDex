@@ -1,0 +1,325 @@
+%% InstrumentDex V4 — conceptual domain model
+%%
+%% This is a domain model, not a physical database schema.
+%% It intentionally excludes operational SPMS concerns: patients/cases, load records,
+%% sterilizer or washer control, inventory, tracking/location, RFID/RTLS, and workflow.
+%%
+%% Governing rules:
+%% - Manufacturer IFU (or other recognised authoritative source) establishes a device-processing requirement.
+%% - Local publication validates InstrumentDex's representation for local display; it never creates,
+%%   changes, or validates the underlying device-processing requirement.
+%% - Exact product/variant confirmation requires a trusted identifier or trusted local product mapping.
+%% - Visual, tray, terminology, and operational-context evidence can support candidates only.
+
+erDiagram
+    ORGANIZATION ||--o{ FACILITY : contains
+
+    INSTRUMENT_CONCEPT ||--o{ MANUFACTURER_PRODUCT : realized_by
+    MANUFACTURER ||--o{ MANUFACTURER_PRODUCT : makes
+    MANUFACTURER_PRODUCT ||--o{ PRODUCT_IDENTIFIER : identified_by
+    MANUFACTURER_PRODUCT ||--o{ PRODUCT_VARIANT : may_have
+
+    INSTRUMENT_CONCEPT ||--o{ COMMON_TERM : named_by
+    MANUFACTURER_PRODUCT ||--o{ COMMON_TERM : may_have
+    INSTRUMENT_CONCEPT ||--o{ IDENTIFICATION_FEATURE : described_by
+    MANUFACTURER_PRODUCT ||--o{ IDENTIFICATION_FEATURE : distinguished_by
+    PRODUCT_VARIANT ||--o{ IDENTIFICATION_FEATURE : distinguished_by
+    INSTRUMENT_CONCEPT ||--o{ CONFUSABLE_RELATIONSHIP : left_side
+    INSTRUMENT_CONCEPT ||--o{ CONFUSABLE_RELATIONSHIP : right_side
+
+    FACILITY ||--o{ FACILITY_INSTRUMENT_PROFILE : recognizes
+    INSTRUMENT_CONCEPT ||--o{ FACILITY_INSTRUMENT_PROFILE : configured_as
+    MANUFACTURER_PRODUCT o|--o{ FACILITY_INSTRUMENT_PROFILE : may_specify
+    PRODUCT_VARIANT o|--o{ FACILITY_INSTRUMENT_PROFILE : may_specify
+    FACILITY_INSTRUMENT_PROFILE ||--o{ LOCAL_TERM : called
+
+    FACILITY ||--o{ TRUSTED_LOCAL_PRODUCT_MAPPING : governs
+    FACILITY_INSTRUMENT_PROFILE ||--o{ TRUSTED_LOCAL_PRODUCT_MAPPING : maps
+    MANUFACTURER_PRODUCT ||--o{ TRUSTED_LOCAL_PRODUCT_MAPPING : resolves_to
+    PRODUCT_VARIANT o|--o{ TRUSTED_LOCAL_PRODUCT_MAPPING : may_resolve_to
+
+    FACILITY ||--o{ TRAY_DEFINITION : defines
+    TRAY_DEFINITION ||--o{ TRAY_MEMBERSHIP : contains
+    FACILITY_INSTRUMENT_PROFILE ||--o{ TRAY_MEMBERSHIP : appears_in
+    FACILITY ||--o{ LOCAL_OPERATIONAL_NOTE : owns
+    FACILITY_INSTRUMENT_PROFILE o|--o{ LOCAL_OPERATIONAL_NOTE : contextualizes
+
+    MEDIA_ASSET ||--o{ INSTRUMENT_MEDIA : used_as
+    INSTRUMENT_CONCEPT o|--o{ INSTRUMENT_MEDIA : depicts
+    MANUFACTURER_PRODUCT o|--o{ INSTRUMENT_MEDIA : depicts
+    PRODUCT_VARIANT o|--o{ INSTRUMENT_MEDIA : depicts
+    INSTRUMENT_MEDIA ||--o{ MEDIA_ANNOTATION : annotated_by
+
+    SOURCE_DOCUMENT ||--o{ AUTHORITATIVE_SOURCE_REVISION : versioned_as
+    KNOWLEDGE_ITEM ||--o{ KNOWLEDGE_REPRESENTATION_REVISION : represented_by
+    KNOWLEDGE_REPRESENTATION_REVISION ||--o{ SOURCE_GROUNDING_ASSESSMENT : grounded_by
+    AUTHORITATIVE_SOURCE_REVISION ||--o{ SOURCE_GROUNDING_ASSESSMENT : supports
+    MANUFACTURER_PRODUCT ||--o{ SOURCE_GROUNDING_ASSESSMENT : applies_to
+    PRODUCT_VARIANT o|--o{ SOURCE_GROUNDING_ASSESSMENT : may_apply_to
+
+    KNOWLEDGE_REPRESENTATION_REVISION ||--o{ KNOWLEDGE_APPLICABILITY : scoped_by
+    INSTRUMENT_CONCEPT o|--o{ KNOWLEDGE_APPLICABILITY : concept_scope
+    MANUFACTURER_PRODUCT o|--o{ KNOWLEDGE_APPLICABILITY : product_scope
+    PRODUCT_VARIANT o|--o{ KNOWLEDGE_APPLICABILITY : variant_scope
+    ORGANIZATION o|--o{ KNOWLEDGE_APPLICABILITY : organization_scope
+    FACILITY o|--o{ KNOWLEDGE_APPLICABILITY : facility_scope
+
+    FACILITY ||--o{ LOCAL_PUBLICATION_DECISION : makes
+    KNOWLEDGE_REPRESENTATION_REVISION ||--o{ LOCAL_PUBLICATION_DECISION : considered_for
+
+    EXTERNAL_SYSTEM ||--o{ EXTERNAL_IDENTIFIER_MAPPING : owns_namespace
+    MANUFACTURER_PRODUCT o|--o{ EXTERNAL_IDENTIFIER_MAPPING : may_map
+    FACILITY_INSTRUMENT_PROFILE o|--o{ EXTERNAL_IDENTIFIER_MAPPING : may_map
+    TRAY_DEFINITION o|--o{ EXTERNAL_IDENTIFIER_MAPPING : may_map
+
+    ORGANIZATION {
+        uuid id PK
+        text name
+        enum lifecycle_status
+    }
+
+    FACILITY {
+        uuid id PK
+        uuid organization_id FK
+        text name
+        enum lifecycle_status
+    }
+
+    INSTRUMENT_CONCEPT {
+        uuid id PK
+        text canonical_label
+        enum lifecycle_status
+    }
+
+    MANUFACTURER {
+        uuid id PK
+        text legal_or_display_name
+        enum lifecycle_status
+    }
+
+    MANUFACTURER_PRODUCT {
+        uuid id PK
+        uuid instrument_concept_id FK
+        uuid manufacturer_id FK
+        text product_label
+        enum lifecycle_status
+    }
+
+    PRODUCT_VARIANT {
+        uuid id PK
+        uuid manufacturer_product_id FK
+        text variant_label
+        text identity_critical_discriminator
+        enum lifecycle_status
+    }
+
+    PRODUCT_IDENTIFIER {
+        uuid id PK
+        uuid manufacturer_product_id FK
+        text identifier_type
+        text identifier_value
+        text namespace
+        enum trust_status
+    }
+
+    COMMON_TERM {
+        uuid id PK
+        uuid instrument_concept_id FK
+        uuid manufacturer_product_id FK
+        text term
+        enum term_type
+        text language_code
+        text provenance
+        enum lifecycle_status
+    }
+
+    IDENTIFICATION_FEATURE {
+        uuid id PK
+        uuid instrument_concept_id FK
+        uuid manufacturer_product_id FK
+        uuid product_variant_id FK
+        text feature_type
+        text description
+        text provenance
+    }
+
+    CONFUSABLE_RELATIONSHIP {
+        uuid id PK
+        uuid left_instrument_concept_id FK
+        uuid right_instrument_concept_id FK
+        text distinction
+        enum relationship_direction
+        text provenance
+        enum lifecycle_status
+    }
+
+    FACILITY_INSTRUMENT_PROFILE {
+        uuid id PK
+        uuid facility_id FK
+        uuid instrument_concept_id FK
+        uuid manufacturer_product_id FK
+        uuid product_variant_id FK
+        enum lifecycle_status
+    }
+
+    LOCAL_TERM {
+        uuid id PK
+        uuid facility_instrument_profile_id FK
+        text term
+        enum term_type
+        enum lifecycle_status
+    }
+
+    TRUSTED_LOCAL_PRODUCT_MAPPING {
+        uuid id PK
+        uuid facility_id FK
+        uuid facility_instrument_profile_id FK
+        uuid manufacturer_product_id FK
+        uuid product_variant_id FK
+        text evidence_basis
+        text source_reference
+        text reviewed_by
+        datetime reviewed_at
+        enum mapping_status
+    }
+
+    TRAY_DEFINITION {
+        uuid id PK
+        uuid facility_id FK
+        text name
+        text tray_type
+        enum lifecycle_status
+    }
+
+    TRAY_MEMBERSHIP {
+        uuid id PK
+        uuid tray_definition_id FK
+        uuid facility_instrument_profile_id FK
+        int expected_quantity
+        text position_hint
+        enum lifecycle_status
+    }
+
+    LOCAL_OPERATIONAL_NOTE {
+        uuid id PK
+        uuid facility_id FK
+        uuid facility_instrument_profile_id FK
+        text note
+        text provenance
+        enum publication_status
+    }
+
+    MEDIA_ASSET {
+        uuid id PK
+        text storage_locator
+        text integrity_hash
+        text provenance
+        text rights_basis
+        enum lifecycle_status
+    }
+
+    INSTRUMENT_MEDIA {
+        uuid id PK
+        uuid media_asset_id FK
+        uuid instrument_concept_id FK
+        uuid manufacturer_product_id FK
+        uuid product_variant_id FK
+        text view_type
+        text caption
+        enum publication_status
+    }
+
+    MEDIA_ANNOTATION {
+        uuid id PK
+        uuid instrument_media_id FK
+        text annotation_type
+        text annotation_content
+    }
+
+    SOURCE_DOCUMENT {
+        uuid id PK
+        text publisher
+        text title
+        text document_identifier
+        enum authority_class
+    }
+
+    AUTHORITATIVE_SOURCE_REVISION {
+        uuid id PK
+        uuid source_document_id FK
+        text revision_label
+        date published_at
+        date retrieved_at
+        text source_locator
+        text integrity_hash
+        enum lifecycle_status
+    }
+
+    KNOWLEDGE_ITEM {
+        uuid id PK
+        enum knowledge_class
+        text subject
+        enum lifecycle_status
+    }
+
+    KNOWLEDGE_REPRESENTATION_REVISION {
+        uuid id PK
+        uuid knowledge_item_id FK
+        int revision_number
+        text representation_content
+        enum minimum_identity_level
+        enum revision_state
+        text authored_by
+        datetime authored_at
+    }
+
+    SOURCE_GROUNDING_ASSESSMENT {
+        uuid id PK
+        uuid knowledge_representation_revision_id FK
+        uuid authoritative_source_revision_id FK
+        uuid manufacturer_product_id FK
+        uuid product_variant_id FK
+        text source_locator
+        text assessment
+        text assessed_by
+        datetime assessed_at
+        enum assessment_status
+    }
+
+    KNOWLEDGE_APPLICABILITY {
+        uuid id PK
+        uuid knowledge_representation_revision_id FK
+        uuid instrument_concept_id FK
+        uuid manufacturer_product_id FK
+        uuid product_variant_id FK
+        uuid organization_id FK
+        uuid facility_id FK
+        date effective_from
+        date effective_until
+    }
+
+    LOCAL_PUBLICATION_DECISION {
+        uuid id PK
+        uuid facility_id FK
+        uuid knowledge_representation_revision_id FK
+        enum decision
+        text decided_by
+        datetime decided_at
+        date effective_from
+        date effective_until
+        text rationale
+    }
+
+    EXTERNAL_SYSTEM {
+        uuid id PK
+        text system_name
+        text namespace
+    }
+
+    EXTERNAL_IDENTIFIER_MAPPING {
+        uuid id PK
+        uuid external_system_id FK
+        text external_entity_type
+        text external_identifier
+        enum mapping_status
+    }
