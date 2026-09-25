@@ -4,10 +4,22 @@ import {supabaseConfig} from './supabase-config.js';
 const playgroundEmails=Object.freeze({tester:'tester@instrumentdex.demo'});
 export const supabase=createClient(supabaseConfig.url,supabaseConfig.publishableKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 function incorrectCredentials(){const error=new Error('Incorrect username or password.');error.kind='authentication';return error;}
+const isInvalidRefreshSession=error=>['refresh_token_not_found','invalid_refresh_token','invalid_grant'].includes(error?.code)||(error?.status===400&&/refresh(?:_| )token|invalid grant/i.test(error?.message||''));
+
+export async function clearLocalSession(){
+ const {error}=await supabase.auth.signOut({scope:'local'});
+ if(error)throw error;
+}
 
 export async function getTesterSession(){
  const {data,error}=await supabase.auth.getSession();
- if(error)throw error;
+ if(error){
+  if(isInvalidRefreshSession(error)){
+   await clearLocalSession().catch(()=>{});
+   return null;
+  }
+  throw error;
+ }
  return data.session;
 }
 export async function signInTester(username,password){
@@ -22,8 +34,7 @@ export async function signInTester(username,password){
  return data.session;
 }
 export async function signOut(){
- const {error}=await supabase.auth.signOut();
- if(error)throw error;
+ await clearLocalSession();
 }
 export async function loadSharedDrafts(){
  const {data,error}=await supabase.rpc('list_playground_instruments');

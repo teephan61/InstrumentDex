@@ -26,9 +26,18 @@ test('tester sign-in authenticates before checking tester authorization',()=>{
 });
 
 test('successful sign-out clears local state and renders the welcome board immediately',()=>{
+ assert.match(playgroundSource,/supabase\.auth\.signOut\(\{scope:'local'\}\)/);
  assert.match(appSource,/await \(await getPlaygroundApi\(\)\)\.signOut\(\);\s*testerSession=null;\s*renderTesterUi\(\);\s*renderWelcome\(\);/);
  assert.match(appSource,/catch\(error\)\{\s*button\.disabled=false;\s*renderTesterUi\('Tester sign-out is temporarily unavailable\.'\);/);
  assert.match(appSource,/if\(event==='SIGNED_OUT'\|\|!session\)\{testerSession=null;renderTesterUi\(\);renderWelcome\(\);\}/);
+});
+
+test('an invalid restored refresh session is cleared locally before startup continues',()=>{
+ assert.match(playgroundSource,/const isInvalidRefreshSession=/);
+ assert.match(playgroundSource,/if\(isInvalidRefreshSession\(error\)\)\{\s*await clearLocalSession\(\)\.catch\(\(\)=>\{\}\);\s*return null;/);
+ assert.match(playgroundSource,/export async function clearLocalSession\(\)\{\s*const \{error\}=await supabase\.auth\.signOut\(\{scope:'local'\}\)/);
+ assert.match(appSource,/testerSession=await api\.getTesterSession\(\);/);
+ assert.match(appSource,/if\(testerSession\)\{\s*await activateTesterSession\(testerSession\);/);
 });
 
 test('tester-facing entry text avoids internal playground terminology',()=>{
